@@ -1,0 +1,39 @@
+name: Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: nagara-scroll-debug-key-v1
+      - uses: gradle/actions/setup-gradle@v4
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Voice command tests
+        run: |
+          mkdir -p /tmp/voice-tests
+          javac -d /tmp/voice-tests app/src/main/java/com/kobatetsu/flowscroll/VoiceCommand.java tests/VoiceCommandTest.java
+          java -cp /tmp/voice-tests VoiceCommandTest
+      - run: bash gradlew assembleDebug lintDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NagaraScroll-voice-v1.1.0-test-apk
+          path: app/build/outputs/apk/debug/*.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.html

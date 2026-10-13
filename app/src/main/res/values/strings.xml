@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ながらスクロール 声操作</string>
+    <string name="service_name">ながらスクロール 声操作</string>
+    <string name="service_description">画面上の操作パネルから、利用者が開始した自動スクロールを実行します。画面の文字は取得・保存・送信しません。</string>
+</resources>
