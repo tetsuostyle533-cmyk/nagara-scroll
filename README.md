@@ -1,6 +1,12 @@
-# ながらスクロール 声操作 1.1.0（音声操作追加・未ビルド）
+# ながらスクロール 声操作 1.1.0（音声操作追加）
 
-2026年10月13日。既存1.0.0のソースを修正した開発版です。**インストールできるAPKはこのZIPに含まれません。Androidでのコンパイル、Lint、実機動作は未確認です。**
+2026年10月13日。既存1.0.0を修正したテスト版です。GitHub ActionsでAPK作成、Lint、音声命令テスト10件が通過しました。スマホでの実機確認は未完了です。
+
+[Android用APKをダウンロード](https://github.com/tetsuostyle533-cmyk/nagara-scroll/releases/download/test-39fcba9/NagaraScroll-voice-v1.1.0.apk)
+
+[作成結果](https://github.com/tetsuostyle533-cmyk/nagara-scroll/actions/runs/38342494386)
+
+ダウンロードしたAPKを開いてインストールします。旧版のユーザー補助をOFFにして「ながらスクロール 声操作」をONにし、アプリから声操作をONにしてマイクを許可してください。旧版の削除は不要です。設定がグレーの場合は、設定→アプリ→ながらスクロール 声操作→右上の︙→制限付き設定を許可、と進みます。
 
 ## 今回の変更
 
@@ -16,7 +22,7 @@
 - パネルの移動を画面内に制限。ホーム画面はシステムバーを避けて表示。
 - アプリ内命令の受信を署名権限で保護（古いAndroidも対象）。
 
-## 使い方（ビルド・実機確認後）
+## スマホでの試し方
 
 1. 初回のみ、ユーザー補助で「ながらスクロール 声操作」をON。
 2. アプリの「声操作をONにする」を押してマイクを許可。
@@ -50,7 +56,7 @@ CLI:
 bash gradlew assembleDebug lintDebug --no-daemon
 ```
 
-GitHubにこのフォルダをリポジトリのルートとして登録すると、同梱の `.github/workflows/android-build.yml` がビルドとLintを実行し、テスト用APKをActionsのArtifactsに出力します。現時点でGitHubへの登録やこのワークフローの実行は行っていません。
+GitHubにこのフォルダをリポジトリのルートとして登録すると、同梱の `.github/workflows/android-build.yml` がビルドとLintを実行し、テスト用APKをActionsのArtifactsに出力します。GitHubへの登録と実行は完了しました。mainへのコード更新で自動ビルドし、チェック成功時のみテスト用APKをReleasesに登録します。
 
 applicationIdは `com.kobatetsu.flowscroll.voice`。旧修正版の署名鍵がないため別アプリとしてインストールします。旧アプリを削除する必要はありません。試用時は旧版のパネルを閉じ、ユーザー補助の旧版をOFFにしてから声操作版をONにしてください。同時に動かすとスワイプが干渉します。
 
@@ -62,11 +68,12 @@ CIはdebug署名鍵をActionsキャッシュに保存し再利用します。キ
 - Javaの構文解析：5ファイル通過（Android APIの型検査ではありません）。
 - 実装したVoiceCommandのJavaテスト：10ケース通過。
 - XMLの構文確認。
+- GitHub ActionsでassembleDebug、lintDebug成功。
+- APKの公開とダウンロードURL・サイズ確認（30,403 bytes）。
 
 未確認：
-- assembleDebug／Lint：この環境にはAndroid SDKがなく、Gradle配布取得はネットワーク制限で失敗。
 - 実機での音声認識、ChatGPT／Chrome操作、画面回転、画面OFF。
 - Android 12／14／17、マイク許可／拒否／取消、通知拒否。
 - 15分終了、3回エラー終了、ユーザー補助OFF、パネル×、再開始。
 
-以上を確認するまでは完成版APKとして配布しないでください。
+実機確認前のテスト版です。声が聞き取れない場合はパネルの停止ボタンで止めてください。
