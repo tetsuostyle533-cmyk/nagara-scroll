@@ -49,6 +49,12 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
     private Button playButton;
     private TextView speedText;
     private boolean receiverRegistered;
+    private final BroadcastReceiver screenOffReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            stopScrolling();
+            stopService(new Intent(context, VoiceControlService.class));
+        }
+    };
 
     private final BroadcastReceiver overlayCommandReceiver = new BroadcastReceiver() {
         @Override
@@ -93,6 +99,7 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
         removeOverlay();
         if (receiverRegistered) {
             unregisterReceiver(overlayCommandReceiver);
+            unregisterReceiver(screenOffReceiver);
             receiverRegistered = false;
         }
         super.onDestroy();
@@ -105,11 +112,12 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
         filter.addAction(ACTION_START_SCROLL);
         filter.addAction(ACTION_STOP_SCROLL);
         filter.addAction(ACTION_VOICE_STATUS);
-        filter.addAction(Intent.ACTION_SCREEN_OFF);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(overlayCommandReceiver, filter, getPackageName() + ".INTERNAL", null, Context.RECEIVER_NOT_EXPORTED);
+            registerReceiver(screenOffReceiver, new IntentFilter(Intent.ACTION_SCREEN_OFF), Context.RECEIVER_NOT_EXPORTED);
         } else {
             registerReceiver(overlayCommandReceiver, filter, getPackageName() + ".INTERNAL", null);
+            registerReceiver(screenOffReceiver, new IntentFilter(Intent.ACTION_SCREEN_OFF));
         }
         receiverRegistered = true;
     }
@@ -197,11 +205,15 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
         voiceStatus = label(VoiceControlService.status, 14, Color.WHITE, false);
         voiceStatus.setGravity(Gravity.CENTER);
         panel.addView(voiceStatus, new LinearLayout.LayoutParams(dp(242), ViewGroup.LayoutParams.WRAP_CONTENT));
-        Button voiceOff = smallButton("マイクOFF", "声操作を終了する");
+        Button voiceOff = smallButton("声操作 ON / OFF", "声操作を切り替える");
         voiceOff.setTextSize(16);
         voiceOff.setOnClickListener(v -> {
-            stopService(new Intent(this, VoiceControlService.class));
-            voiceStatus.setText("声操作 OFF");
+            if (VoiceControlService.active) {
+                stopService(new Intent(this, VoiceControlService.class));
+                voiceStatus.setText("声操作 OFF");
+            } else {
+                startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            }
         });
         panel.addView(voiceOff, new LinearLayout.LayoutParams(dp(160), dp(48)));
         return panel;

@@ -8,6 +8,8 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.speech.SpeechRecognizer;
+import android.speech.ModelDownloadListener;
+import android.speech.RecognitionListener;
 import android.widget.Toast;
 import android.app.AlertDialog;
 import android.content.Intent;
@@ -35,6 +37,9 @@ public final class MainActivity extends Activity {
     private Button settingsButton;
     private Button voiceButton;
     private TextView voiceStatus;
+    private TextView modelStatus;
+    private SpeechRecognizer modelRecognizer;
+    private int modelGeneration;
     private final Handler statusHandler = new Handler(Looper.getMainLooper());
     private final Runnable refreshVoice = new Runnable() {
         public void run() {
@@ -60,6 +65,55 @@ public final class MainActivity extends Activity {
     @Override protected void onPause() {
         statusHandler.removeCallbacks(refreshVoice);
         super.onPause();
+    }
+
+    @Override protected void onDestroy() {
+        modelGeneration++;
+        if (modelRecognizer != null) { modelRecognizer.destroy(); modelRecognizer = null; }
+        super.onDestroy();
+    }
+
+    private void prepareJapaneseVoice() {
+        if (VoiceControlService.active) {
+            Toast.makeText(this, "声操作をOFFにしてから準備してください", Toast.LENGTH_LONG).show(); return;
+        }
+        if (Build.VERSION.SDK_INT < 33 || !SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
+            modelStatus.setText("端末の設定で日本語のオフライン音声認識を準備してください"); return;
+        }
+        final int token = ++modelGeneration;
+        if (modelRecognizer != null) modelRecognizer.destroy();
+        try {
+            modelRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
+            modelRecognizer.setRecognitionListener(new RecognitionListener() {
+                public void onReadyForSpeech(Bundle b) {}
+                public void onBeginningOfSpeech() {}
+                public void onRmsChanged(float r) {}
+                public void onBufferReceived(byte[] b) {}
+                public void onEndOfSpeech() {}
+                public void onError(int e) {}
+                public void onResults(Bundle b) {}
+                public void onPartialResults(Bundle b) {}
+                public void onEvent(int e, Bundle b) {}
+            });
+            modelStatus.setText("日本語音声を準備中。初回はWi-Fiにつないでください");
+            if (Build.VERSION.SDK_INT >= 34) {
+                modelRecognizer.triggerModelDownload(VoiceControlService.recognitionRequest(), getMainExecutor(),
+                    new ModelDownloadListener() {
+                        private void show(String text) {
+                            if (token == modelGeneration && !isDestroyed()) modelStatus.setText(text);
+                        }
+                        public void onProgress(int progress) { show("日本語音声をダウンロード中：" + progress + "％"); }
+                        public void onSuccess() { show("日本語音声の準備ができました。「声操作をONにする」を押してください"); }
+                        public void onScheduled() { show("ダウンロードを予約しました。Wi-Fi接続後、もう一度このボタンを押してください"); }
+                        public void onError(int error) { show("準備できませんでした（" + error + "）。音声認識アプリの更新とWi-Fiを確認してください"); }
+                    });
+            } else {
+                modelRecognizer.triggerModelDownload(VoiceControlService.recognitionRequest());
+                modelStatus.setText("日本語データの準備を依頼しました。少し待ってから声操作をONにしてください");
+            }
+        } catch (RuntimeException error) {
+            modelStatus.setText("日本語音声の準備を開始できません。端末の音声認識アプリを確認してください");
+        }
     }
 
     private void enableVoice() {
@@ -162,6 +216,14 @@ public final class MainActivity extends Activity {
             }
         });
         voiceCard.addView(voiceButton, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(58)));
+        Button prepare = new Button(this);
+        prepare.setText("日本語音声を準備する");
+        prepare.setTextSize(18);
+        prepare.setAllCaps(false);
+        prepare.setOnClickListener(v -> prepareJapaneseVoice());
+        voiceCard.addView(prepare, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(58)));
+        modelStatus = text("声操作が動かないときは、日本語音声の準備と、マイクのアクセスがONかを確認してください。", 16, MUTED, false);
+        voiceCard.addView(modelStatus, topMargin(8));
         page.addView(voiceCard, topMargin(16));
 
         TextView howTitle = text("使い方", 20, NAVY, true);
@@ -183,7 +245,7 @@ public final class MainActivity extends Activity {
         privacy.addView(privacyBody, topMargin(8));
         page.addView(privacy, topMargin(28));
 
-        TextView note = text("試作版 1.1.0 • ボタン：Android 7以降／声：Android 12以降", 12, Color.rgb(100, 116, 139), false);
+        TextView note = text("試作版 1.1.1 • ボタン：Android 7以降／声：Android 12以降", 14, Color.rgb(100, 116, 139), false);
         note.setGravity(Gravity.CENTER);
         page.addView(note, topMargin(24));
 
