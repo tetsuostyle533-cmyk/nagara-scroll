@@ -71,6 +71,7 @@ public final class VoiceControlService extends Service {
     }
 
     private void createRecognizer() {
+        if (Build.VERSION.SDK_INT < 31) throw new UnsupportedOperationException("Android 12 required");
         releaseRecognizer();
         recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
         final int token = generation;
