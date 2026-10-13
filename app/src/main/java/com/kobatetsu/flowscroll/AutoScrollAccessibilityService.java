@@ -40,6 +40,8 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
     private static final int PANEL = Color.rgb(15, 23, 42);
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable nextGesture = this::performNextGesture;
+    private boolean gestureInFlight;
     private WindowManager windowManager;
     private WindowManager.LayoutParams overlayParams;
     private LinearLayout overlay;
@@ -47,6 +49,7 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
     private boolean collapsed;
     private int speedLevel = 3;
     private Button playButton;
+    private Button slowerButton, fasterButton;
     private TextView speedText;
     private boolean receiverRegistered;
     private final BroadcastReceiver screenOffReceiver = new BroadcastReceiver() {
@@ -187,6 +190,7 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
         speedRow.setGravity(Gravity.CENTER);
 
         Button slower = smallButton("−", "速度を下げる");
+        slowerButton = slower;
         slower.setOnClickListener(v -> changeSpeed(-1));
         speedRow.addView(slower, new LinearLayout.LayoutParams(dp(48), dp(44)));
 
@@ -195,6 +199,7 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
         speedRow.addView(speedText, new LinearLayout.LayoutParams(dp(96), dp(44)));
 
         Button faster = smallButton("＋", "速度を上げる");
+        fasterButton = faster;
         faster.setOnClickListener(v -> changeSpeed(1));
         speedRow.addView(faster, new LinearLayout.LayoutParams(dp(48), dp(44)));
 
@@ -202,6 +207,7 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         speedParams.topMargin = dp(8);
         panel.addView(speedRow, speedParams);
+        refreshSpeedControls();
         voiceStatus = label(VoiceControlService.status, 14, Color.WHITE, false);
         voiceStatus.setGravity(Gravity.CENTER);
         panel.addView(voiceStatus, new LinearLayout.LayoutParams(dp(242), ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -262,6 +268,7 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
 
     private void stopScrolling() {
         running = false;
+        gestureInFlight = false;
         scrollGeneration++;
         handler.removeCallbacksAndMessages(null);
         refreshPlayButton();
@@ -269,7 +276,7 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
     }
 
     private void performNextGesture() {
-        if (!running) return;
+        if (!running || gestureInFlight) return;
         final int generation = scrollGeneration;
 
         WindowManager currentWindowManager = windowManager;
@@ -280,6 +287,20 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
         float x = metrics.widthPixels * 0.38f;
         float centerY = metrics.heightPixels * 0.56f;
         float distance = dp(ScrollSpeedProfile.distanceDp(speedLevel));
+        // Keep the swipe away from our own draggable panel.
+        if (overlay != null) {
+            int[] position = new int[2];
+            overlay.getLocationOnScreen(position);
+            float top = centerY - distance / 2f;
+            float bottom = centerY + distance / 2f;
+            if (bottom > position[1] && top < position[1] + overlay.getHeight()
+                    && x >= position[0] && x <= position[0] + overlay.getWidth()) {
+                float leftSpace = Math.max(0, position[0]);
+                float rightEdge = position[0] + overlay.getWidth();
+                float rightSpace = Math.max(0, metrics.widthPixels - rightEdge);
+                x = leftSpace >= rightSpace ? leftSpace / 2f : rightEdge + rightSpace / 2f;
+            }
+        }
 
         Path path = new Path();
         path.moveTo(x, centerY + distance / 2f);
@@ -292,23 +313,30 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
                 .addStroke(stroke)
                 .build();
 
+        gestureInFlight = true;
         boolean accepted = dispatchGesture(gesture,
                 new GestureResultCallback() {
                     @Override
                     public void onCompleted(GestureDescription gestureDescription) {
-                        if (running && generation == scrollGeneration) handler.postDelayed(
-                                AutoScrollAccessibilityService.this::performNextGesture, 30L);
+                        if (running && generation == scrollGeneration) {
+                            gestureInFlight = false;
+                            handler.postDelayed(nextGesture, ScrollSpeedProfile.pauseMs(speedLevel));
+                        }
                     }
 
                     @Override
                     public void onCancelled(GestureDescription gestureDescription) {
-                        if (running && generation == scrollGeneration) handler.postDelayed(
-                                AutoScrollAccessibilityService.this::performNextGesture, 220L);
+                        if (running && generation == scrollGeneration) {
+                            gestureInFlight = false;
+                            handler.postDelayed(nextGesture, 350L);
+                        }
                     }
                 }, handler);
 
-        if (!accepted && running) {
-            handler.postDelayed(this::performNextGesture, 350L);
+        if (!accepted && running && generation == scrollGeneration) {
+            gestureInFlight = false;
+            handler.removeCallbacks(nextGesture);
+            handler.postDelayed(nextGesture, 350L);
         }
     }
 
@@ -316,7 +344,24 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
         speedLevel = ScrollSpeedProfile.clampLevel(speedLevel + delta);
         getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit().putInt(KEY_SPEED, speedLevel).apply();
+        refreshSpeedControls();
+        // Replace an old pause immediately, but never overlap an in-flight swipe.
+        if (running && !gestureInFlight) {
+            handler.removeCallbacks(nextGesture);
+            handler.post(nextGesture);
+        }
+    }
+
+    private void refreshSpeedControls() {
         if (speedText != null) speedText.setText(speedLabel());
+        if (slowerButton != null) {
+            slowerButton.setEnabled(speedLevel > 1);
+            slowerButton.setAlpha(speedLevel > 1 ? 1f : 0.4f);
+        }
+        if (fasterButton != null) {
+            fasterButton.setEnabled(speedLevel < 5);
+            fasterButton.setAlpha(speedLevel < 5 ? 1f : 0.4f);
+        }
     }
 
     private String speedLabel() {
