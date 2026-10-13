@@ -230,7 +230,7 @@ public final class MainActivity extends Activity {
         page.addView(howTitle, topMargin(32));
         page.addView(step("1", "最初の1回だけ、ユーザー補助で「ながらスクロール 声操作」をON。"), topMargin(14));
         page.addView(step("2", "ChatGPTやChromeなど、読みたい画面を開く。"), topMargin(12));
-        page.addView(step("3", "画面端の ▶ を押す。速度は − / ＋ で5段階。速度1は、少し進んで間を空けるゆっくり読みです。"), topMargin(12));
+        page.addView(step("3", "画面端の ▶ を押す。速度は − / ＋ で5段階。速度1は最もゆっくり。押したまま滑らせる連続スクロールです。"), topMargin(12));
 
         TextView restrictedNote = text("設定がグレーで選べない場合：設定 → アプリ → ながらスクロール 声操作 → 右上の︙ →「制限付き設定を許可」を先に選びます。", 13, MUTED, false);
         restrictedNote.setLineSpacing(dp(3), 1f);
@@ -245,7 +245,7 @@ public final class MainActivity extends Activity {
         privacy.addView(privacyBody, topMargin(8));
         page.addView(privacy, topMargin(28));
 
-        TextView note = text("試作版 1.1.2 • ボタン：Android 7以降／声：Android 12以降", 14, Color.rgb(100, 116, 139), false);
+        TextView note = text("試作版 1.1.3 • ボタン：Android 7以降／声：Android 12以降", 14, Color.rgb(100, 116, 139), false);
         note.setGravity(Gravity.CENTER);
         page.addView(note, topMargin(24));
 

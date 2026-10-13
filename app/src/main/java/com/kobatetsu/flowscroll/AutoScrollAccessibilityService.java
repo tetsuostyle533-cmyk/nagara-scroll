@@ -20,6 +20,7 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewConfiguration;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.widget.Button;
@@ -42,6 +43,9 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable nextGesture = this::performNextGesture;
     private boolean gestureInFlight;
+    private ScrollMotion motion;
+    private GestureDescription.StrokeDescription heldStroke;
+    private float touchX, touchY;
     private WindowManager windowManager;
     private WindowManager.LayoutParams overlayParams;
     private LinearLayout overlay;
@@ -260,7 +264,7 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
     private void startScrolling() {
         if (running) return;
         running = true;
-        scrollGeneration++;
+        if (!gestureInFlight && heldStroke == null) scrollGeneration++;
         refreshPlayButton();
         refreshCollapsedBubble();
         performNextGesture();
@@ -268,76 +272,98 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
 
     private void stopScrolling() {
         running = false;
-        gestureInFlight = false;
-        scrollGeneration++;
-        handler.removeCallbacksAndMessages(null);
+        handler.removeCallbacks(nextGesture);
+        // Let the current 120ms piece finish, then lift the SAME pointer.
+        // Do not send an unrelated tap to cancel a continued gesture.
+        if (!gestureInFlight) releaseHeldTouch();
         refreshPlayButton();
         refreshCollapsedBubble();
     }
 
     private void performNextGesture() {
-        if (!running || gestureInFlight) return;
+        if (!running || gestureInFlight || windowManager == null) return;
+        if (Build.VERSION.SDK_INT < 26) { performLegacyGesture(); return; }
+        if (motion == null) {
+            android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
+            windowManager.getDefaultDisplay().getRealMetrics(metrics);
+            float x = metrics.widthPixels * 0.38f;
+            float top = metrics.heightPixels * 0.27f;
+            float bottom = metrics.heightPixels * 0.72f;
+            if (overlay != null) {
+                int[] position = new int[2];
+                overlay.getLocationOnScreen(position);
+                if (bottom > position[1] && top < position[1] + overlay.getHeight()
+                        && x >= position[0] && x <= position[0] + overlay.getWidth()) {
+                    float leftSpace = Math.max(0, position[0]);
+                    float rightEdge = position[0] + overlay.getWidth();
+                    float rightSpace = Math.max(0, metrics.widthPixels - rightEdge);
+                    x = leftSpace >= rightSpace ? leftSpace / 2f : rightEdge + rightSpace / 2f;
+                }
+            }
+            motion = new ScrollMotion(x, bottom, top, metrics.density,
+                    ViewConfiguration.get(this).getScaledTouchSlop());
+        }
+        ScrollMotion.Step step = motion.next(speedLevel);
+        Path path = new Path();
+        path.moveTo(step.x, step.fromY);
+        if (step.toY != step.fromY) path.lineTo(step.x, step.toY);
+        GestureDescription.StrokeDescription stroke = step.newTouch
+                ? new GestureDescription.StrokeDescription(path, 0, step.durationMs, step.continues)
+                : heldStroke.continueStroke(path, 0, step.durationMs, step.continues);
+        touchX = step.x; touchY = step.toY;
+        dispatchScrollStroke(stroke, step.continues);
+    }
+
+    private void releaseHeldTouch() {
+        if (Build.VERSION.SDK_INT < 26 || gestureInFlight || heldStroke == null) return;
+        Path path = new Path();
+        path.moveTo(touchX, touchY);
+        dispatchScrollStroke(heldStroke.continueStroke(path, 0, 60, false), false);
+    }
+
+    private void dispatchScrollStroke(GestureDescription.StrokeDescription stroke, boolean continues) {
         final int generation = scrollGeneration;
-
-        WindowManager currentWindowManager = windowManager;
-        if (currentWindowManager == null) return;
-
-        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-        currentWindowManager.getDefaultDisplay().getRealMetrics(metrics);
-        float x = metrics.widthPixels * 0.38f;
-        float centerY = metrics.heightPixels * 0.56f;
-        float distance = dp(ScrollSpeedProfile.distanceDp(speedLevel));
-        // Keep the swipe away from our own draggable panel.
-        if (overlay != null) {
-            int[] position = new int[2];
-            overlay.getLocationOnScreen(position);
-            float top = centerY - distance / 2f;
-            float bottom = centerY + distance / 2f;
-            if (bottom > position[1] && top < position[1] + overlay.getHeight()
-                    && x >= position[0] && x <= position[0] + overlay.getWidth()) {
-                float leftSpace = Math.max(0, position[0]);
-                float rightEdge = position[0] + overlay.getWidth();
-                float rightSpace = Math.max(0, metrics.widthPixels - rightEdge);
-                x = leftSpace >= rightSpace ? leftSpace / 2f : rightEdge + rightSpace / 2f;
+        gestureInFlight = true;
+        boolean accepted;
+        try {
+            accepted = dispatchGesture(new GestureDescription.Builder().addStroke(stroke).build(),
+                    new GestureResultCallback() {
+                        @Override public void onCompleted(GestureDescription gesture) {
+                            if (generation != scrollGeneration) return;
+                            gestureInFlight = false;
+                            heldStroke = continues ? stroke : null;
+                            if (!continues) motion = null;
+                            if (running) handler.post(nextGesture);
+                            else releaseHeldTouch();
+                        }
+                        @Override public void onCancelled(GestureDescription gesture) {
+                            if (generation != scrollGeneration) return;
+                            gestureInFlight = false; heldStroke = null; motion = null;
+                            if (running) handler.postDelayed(nextGesture, 350);
+                        }
+                    }, handler);
+        } catch (RuntimeException error) {
+            accepted = false;
+        }
+        if (!accepted && generation == scrollGeneration) {
+            gestureInFlight = false; heldStroke = null; motion = null;
+            if (running) {
+                handler.removeCallbacks(nextGesture);
+                handler.postDelayed(nextGesture, 350);
             }
         }
+    }
 
+    private void performLegacyGesture() {
+        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
+        windowManager.getDefaultDisplay().getRealMetrics(metrics);
         Path path = new Path();
-        path.moveTo(x, centerY + distance / 2f);
-        path.lineTo(x, centerY - distance / 2f);
-
-        GestureDescription.StrokeDescription stroke =
-                new GestureDescription.StrokeDescription(path, 0,
-                        ScrollSpeedProfile.durationMs(speedLevel));
-        GestureDescription gesture = new GestureDescription.Builder()
-                .addStroke(stroke)
-                .build();
-
-        gestureInFlight = true;
-        boolean accepted = dispatchGesture(gesture,
-                new GestureResultCallback() {
-                    @Override
-                    public void onCompleted(GestureDescription gestureDescription) {
-                        if (running && generation == scrollGeneration) {
-                            gestureInFlight = false;
-                            handler.postDelayed(nextGesture, ScrollSpeedProfile.pauseMs(speedLevel));
-                        }
-                    }
-
-                    @Override
-                    public void onCancelled(GestureDescription gestureDescription) {
-                        if (running && generation == scrollGeneration) {
-                            gestureInFlight = false;
-                            handler.postDelayed(nextGesture, 350L);
-                        }
-                    }
-                }, handler);
-
-        if (!accepted && running && generation == scrollGeneration) {
-            gestureInFlight = false;
-            handler.removeCallbacks(nextGesture);
-            handler.postDelayed(nextGesture, 350L);
-        }
+        float x = metrics.widthPixels * 0.38f, y = metrics.heightPixels * 0.56f;
+        float distance = dp(ScrollSpeedProfile.distanceDp(speedLevel));
+        path.moveTo(x, y + distance / 2);
+        path.lineTo(x, y - distance / 2);
+        dispatchScrollStroke(new GestureDescription.StrokeDescription(path, 0,
+                Math.min(900, ScrollSpeedProfile.durationMs(speedLevel))), false);
     }
 
     private void changeSpeed(int delta) {
