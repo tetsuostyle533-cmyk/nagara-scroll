@@ -21,8 +21,14 @@ jobs:
           java-version: '17'
       - uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: nagara-scroll-debug-key-v1
+          path: .ci-signing/debug.keystore
+          key: nagara-scroll-debug-key-v2
+      - name: Prepare reusable test signing key
+        run: |
+          mkdir -p .ci-signing
+          if [ ! -f .ci-signing/debug.keystore ]; then
+            keytool -genkeypair -keystore .ci-signing/debug.keystore -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Android Debug,O=Android,C=US'
+          fi
       - uses: gradle/actions/setup-gradle@v4
       - name: Verify preinstalled Android SDK
         run: |
