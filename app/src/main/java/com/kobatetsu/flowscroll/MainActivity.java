@@ -245,7 +245,7 @@ public final class MainActivity extends Activity {
         privacy.addView(privacyBody, topMargin(8));
         page.addView(privacy, topMargin(28));
 
-        TextView note = text("試作版 1.1.3 • ボタン：Android 7以降／声：Android 12以降", 14, Color.rgb(100, 116, 139), false);
+        TextView note = text("試作版 1.1.4 • ボタン：Android 7以降／声：Android 12以降", 14, Color.rgb(100, 116, 139), false);
         note.setGravity(Gravity.CENTER);
         page.addView(note, topMargin(24));
 

@@ -2,7 +2,8 @@ package com.kobatetsu.flowscroll;
 
 /** Plans contiguous movement; all normal segments retain the same touch. */
 final class ScrollMotion {
-    static final long FRAME_MS = 120;
+    // Fewer callback boundaries; Android still samples each path per display frame.
+    static final long FRAME_MS = 800;
     static final class Step {
         final float x, fromY, toY;
         final long durationMs;
@@ -29,6 +30,12 @@ final class ScrollMotion {
         boolean newTouch = first;
         long duration = first ? 80 : FRAME_MS;
         float distance = first ? initialDistance : ScrollSpeedProfile.distancePx(level, density, duration);
+        float remaining = y - top;
+        // Keep the requested speed when the final segment reaches the lane edge.
+        if (!first && distance > remaining) {
+            duration = Math.max(1L, Math.round(remaining * 1000d
+                    / (ScrollSpeedProfile.speedDpPerSecond(level) * density)));
+        }
         y = Math.max(top, y - distance);
         first = false;
         atTop = y <= top;

@@ -273,7 +273,7 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
     private void stopScrolling() {
         running = false;
         handler.removeCallbacks(nextGesture);
-        // Let the current 120ms piece finish, then lift the SAME pointer.
+        // Let the current segment (at most 800ms) finish, then lift the SAME pointer.
         // Do not send an unrelated tap to cancel a continued gesture.
         if (!gestureInFlight) releaseHeldTouch();
         refreshPlayButton();
@@ -287,8 +287,8 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
             android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
             windowManager.getDefaultDisplay().getRealMetrics(metrics);
             float x = metrics.widthPixels * 0.38f;
-            float top = metrics.heightPixels * 0.27f;
-            float bottom = metrics.heightPixels * 0.72f;
+            float top = metrics.heightPixels * 0.18f;
+            float bottom = metrics.heightPixels * 0.82f;
             if (overlay != null) {
                 int[] position = new int[2];
                 overlay.getLocationOnScreen(position);
@@ -333,7 +333,7 @@ public final class AutoScrollAccessibilityService extends AccessibilityService {
                             gestureInFlight = false;
                             heldStroke = continues ? stroke : null;
                             if (!continues) motion = null;
-                            if (running) handler.post(nextGesture);
+                            if (running) performNextGesture();
                             else releaseHeldTouch();
                         }
                         @Override public void onCancelled(GestureDescription gesture) {

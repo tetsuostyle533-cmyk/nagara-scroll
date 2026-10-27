@@ -44,7 +44,7 @@ jobs:
       - run: bash gradlew assembleDebug lintDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
-          name: NagaraScroll-voice-v1.1.3-test-apk
+          name: NagaraScroll-voice-v1.1.4-test-apk
           path: app/build/outputs/apk/debug/*.apk
       - uses: actions/upload-artifact@v4
         if: always()
@@ -56,26 +56,26 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk NagaraScroll-voice-v1.1.3.apk
-          sha256sum NagaraScroll-voice-v1.1.3.apk > SHA256SUMS.txt
+          cp app/build/outputs/apk/debug/app-debug.apk NagaraScroll-voice-v1.1.4.apk
+          sha256sum NagaraScroll-voice-v1.1.4.apk > SHA256SUMS.txt
           cat > release-notes.txt <<'NOTES'
-          ながらスクロール 声操作 1.1.3 テスト版
+          ながらスクロール 声操作 1.1.4 テスト版
 
           APKをAndroidスマホにダウンロードしてインストールしてください。
           旧版のユーザー補助をOFFにして、声操作版をONにします。
           アプリから声操作をONにし、マイクを許可してください。
           「スクロール」で開始、「ストップ」で停止。
           声操作はAndroid 12以降・端末内の日本語音声認識に対応する端末が必要です。
-          Android 8以降では同じタッチをつなぐ連続スクロールへ変更。長い待ち時間を削除。
+          Android 8以降で連続区間を120msから800msへ延長し、区間切替による停止を軽減。
           速度1を8dp/秒まで下げ、5段階を8/16/28/44/68dp/秒に調整。
-          停止時は同じタッチを離して終了。速度変更は次の120ms区間に反映。
+          画面端の減速を補正し、スワイプ範囲を拡大。停止と速度変更は最大約0.8秒後に反映。
           声操作 ON / OFFボタンでアプリを開いて再開できます。
           マイクOFF、画面OFF、パネル終了で声操作を終了。最大15分です。
           ビルドとLint・音声命令テストは通過。実機での音声認識は未確認です。
           NOTES
           tag="test-${GITHUB_SHA:0:7}"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$tag" NagaraScroll-voice-v1.1.3.apk SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$tag" NagaraScroll-voice-v1.1.4.apk SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$tag" NagaraScroll-voice-v1.1.3.apk SHA256SUMS.txt --target "$GITHUB_SHA" --prerelease --title 'ながらスクロール 声操作 1.1.3 テスト版' --notes-file release-notes.txt --repo "$GITHUB_REPOSITORY"
+            gh release create "$tag" NagaraScroll-voice-v1.1.4.apk SHA256SUMS.txt --target "$GITHUB_SHA" --prerelease --title 'ながらスクロール 声操作 1.1.4 テスト版' --notes-file release-notes.txt --repo "$GITHUB_REPOSITORY"
           fi
